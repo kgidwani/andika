@@ -32,23 +32,23 @@ jobs:
       matrix:
         include:
           # Linux builds
-          - os: ubuntu-latest
-            platform: linux
-            arch: x64
-          - os: ubuntu-latest
-            platform: linux
-            arch: arm64
+          # - os: ubuntu-latest
+          #   platform: linux
+          #   arch: x64
+          # - os: ubuntu-latest
+          #   platform: linux
+          #   arch: arm64
           # Windows builds
           - os: windows-latest
             platform: win32
             arch: x64
-          - os: windows-latest
-            platform: win32
-            arch: arm64
+          # - os: windows-latest
+          #   platform: win32
+          #   arch: arm64
           # macOS builds
-          - os: macos-latest
-            platform: darwin
-            arch: x64
+          # - os: macos-latest
+          #   platform: darwin
+          #   arch: x64
           - os: macos-14 # Use macOS 14 for native ARM64 builds
             platform: darwin
             arch: arm64
