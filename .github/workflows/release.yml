@@ -15,41 +15,18 @@ on:
 
 env:
   # App configuration
-  APP_NAME: "MyElectronApp"
-  
-  # Code signing environment variables
-  # For Windows
-  # WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-  
-  # For macOS
-  # APPLE_ID: ${{ secrets.APPLE_ID }}
-  # APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-  # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+  APP_NAME: "Andika"
+
 
 jobs:
   build:
     strategy:
       matrix:
         include:
-          # Linux builds
-          # - os: ubuntu-latest
-          #   platform: linux
-          #   arch: x64
-          # - os: ubuntu-latest
-          #   platform: linux
-          #   arch: arm64
-          # Windows builds
           - os: windows-latest
             platform: win32
             arch: x64
-          # - os: windows-latest
-          #   platform: win32
-          #   arch: arm64
-          # macOS builds
-          # - os: macos-latest
-          #   platform: darwin
-          #   arch: x64
-          - os: macos-14 # Use macOS 14 for native ARM64 builds
+          - os: macos-14
             platform: darwin
             arch: arm64
     
@@ -64,68 +41,16 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
 
-      # Windows-specific setup
-      # - name: Setup Windows certificate
-      #   if: matrix.platform == 'win32'
-      #   run: |
-      #     echo "${{ secrets.WINDOWS_CERT_BASE64 }}" | base64 -d > certificate.p12
-      #   shell: bash
-
-      # macOS-specific setup
-      # - name: Setup macOS certificates
-      #   if: matrix.platform == 'darwin'
-      #   run: |
-      #     echo "${{ secrets.MACOS_CERT_BASE64 }}" | base64 -d > certificate.p12
-      #     security create-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
-      #     security default-keychain -s build.keychain
-      #     security unlock-keychain -p "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
-      #     security import certificate.p12 -k build.keychain -P "${{ secrets.MACOS_CERT_PASSWORD }}" -T /usr/bin/codesign
-      #     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "${{ secrets.KEYCHAIN_PASSWORD }}" build.keychain
-
-      # ARM64 cross-compilation setup for Linux
-      - name: Setup ARM64 cross-compilation
-        if: matrix.platform == 'linux' && matrix.arch == 'arm64'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          echo "CC=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
-          echo "CXX=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-          echo "AR=aarch64-linux-gnu-ar" >> $GITHUB_ENV
-          echo "STRIP=aarch64-linux-gnu-strip" >> $GITHUB_ENV
-          echo "LINK=aarch64-linux-gnu-g++" >> $GITHUB_ENV
-
-      # Linux-specific setup
-      - name: Install Linux dependencies
-        if: matrix.platform == 'linux'
-        run: |
-          sudo apt-get update
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            # ARM64 dependencies
-            sudo apt-get install -y libnss3-dev:arm64 libatk-bridge2.0-dev:arm64 libdrm2:arm64 libxss1:arm64 libgconf-2-4:arm64 libxrandr2:arm64 libasound2-dev:arm64 libpangocairo-1.0-0:arm64 libatk1.0-dev:arm64 libcairo-gobject2:arm64 libgtk-3-dev:arm64 libgdk-pixbuf2.0-dev:arm64
-          else
-            # x64 dependencies
-            sudo apt-get install -y libnss3-dev libatk-bridge2.0-dev libdrm2 libxss1 libgconf-2-4 libxrandr2 libasound2-dev libpangocairo-1.0-0 libatk1.0-dev libcairo-gobject2 libgtk-3-dev libgdk-pixbuf2.0-dev
-          fi
-
       - name: Build Electron app
         run: npm run make -- --arch=${{ matrix.arch }}
         env:
-          # Code signing configuration
-          # CSC_LINK: ${{ (matrix.platform == 'win32' || matrix.platform == 'darwin') && 'certificate.p12' || '' }}
-          # CSC_KEY_PASSWORD: ${{ matrix.platform == 'win32' && secrets.WINDOWS_CERT_PASSWORD || (matrix.platform == 'darwin' && secrets.MACOS_CERT_PASSWORD || '') }}
-          
-          # macOS notarization
-          # APPLE_ID: ${{ matrix.platform == 'darwin' && secrets.APPLE_ID || '' }}
-          # APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.platform == 'darwin' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          # APPLE_TEAM_ID: ${{ matrix.platform == 'darwin' && secrets.APPLE_TEAM_ID || '' }}
-          
           # Target architecture
           npm_config_target_arch: ${{ matrix.arch }}
           npm_config_target_platform: ${{ matrix.platform }}
@@ -150,12 +75,6 @@ jobs:
             out/**/*.zip
           retention-days: 7
 
-      - name: Clean up certificates
-        if: always()
-        run: |
-          rm -f certificate.p12
-        shell: bash
-
   create-release:
     needs: build
     runs-on: ubuntu-latest
@@ -178,36 +97,7 @@ jobs:
       - name: Get version
         id: version
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Generate release notes
-        id: release_notes
-        run: |
-          if [ -f CHANGELOG.md ]; then
-            # Extract changelog for this version
-            awk '/^## \[${{ steps.version.outputs.version }}\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md > release_notes.md
-          else
-            echo "## What's Changed" > release_notes.md
-            echo "* Bug fixes and improvements" >> release_notes.md
-          fi
-          
-          echo "**Full Changelog**: https://github.com/${{ github.repository }}/compare/$(git describe --tags --abbrev=0 HEAD^)...${{ steps.version.outputs.version }}" >> release_notes.md
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
-          release_name: Release ${{ steps.version.outputs.version }}
-          body_path: release_notes.md
-          draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'rc') }}
+          echo "version=1.0" >> $GITHUB_OUTPUT
 
       - name: Upload Release Assets
         run: |
@@ -230,71 +120,11 @@ jobs:
               break
             fi
           done
-          
-          # Upload Windows ARM64 artifacts
-          for file in artifacts/win32-arm64-build/out/make/**/*.exe; do
-            if [ -f "$file" ]; then
-              upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-windows-arm64.exe"
-              break
-            fi
-          done
-          
-          # Upload macOS x64 artifacts
-          for file in artifacts/darwin-x64-build/out/make/**/*.dmg; do
-            if [ -f "$file" ]; then
-              upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-macos-x64.dmg"
-              break
-            fi
-          done
-          
+                    
           # Upload macOS ARM64 artifacts
           for file in artifacts/darwin-arm64-build/out/make/**/*.dmg; do
             if [ -f "$file" ]; then
               upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-macos-arm64.dmg"
-              break
-            fi
-          done
-          
-          # Upload Linux x64 artifacts
-          for file in artifacts/linux-x64-build/out/make/**/*.deb; do
-            if [ -f "$file" ]; then
-              upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-linux-x64.deb"
-              break
-            fi
-          done
-          
-          for file in artifacts/linux-x64-build/out/make/**/*.rpm; do
-            if [ -f "$file" ]; then
-              upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-linux-x64.rpm"
-              break
-            fi
-          done
-          
-          for file in artifacts/linux-x64-build/out/make/**/*.AppImage; do
-            if [ -f "$file" ]; then
-              upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-linux-x64.AppImage"
-              break
-            fi
-          done
-          
-          # Upload Linux ARM64 artifacts
-          for file in artifacts/linux-arm64-build/out/make/**/*.deb; do
-            if [ -f "$file" ]; then
-              upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-linux-arm64.deb"
-              break
-            fi
-          done
-          
-          for file in artifacts/linux-arm64-build/out/make/**/*.rpm; do
-            if [ -f "$file" ]; then
-              upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-linux-arm64.rpm"
-              break
-            fi
-          done
-          
-          for file in artifacts/linux-arm64-build/out/make/**/*.AppImage; do
-            if [ -f "$file" ]; then
-              upload_file "$file" "${APP_NAME}-${{ steps.version.outputs.version }}-linux-arm64.AppImage"
               break
             fi
           done
